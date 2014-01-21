@@ -20,7 +20,13 @@ sendRules :
    kind : Ack
    seqNum : 4
  - action : delay
-   kind : Lookup
+   src : alice
+   dest : alice
+   kind : Lookup1
+ - action : duplicate
+   src : alice
+   dest : alice
+   kind : Lookup2
 
 receiveRules :
  - action : duplicate

@@ -24,7 +24,13 @@ public class CommunicationInfra {
 		}
 		
 		MessagePasser mp = new MessagePasser(args[0], args[1]);
-		Message msg = new Message("alice", "PROMPT", "This is the first message of 18842");
-		mp.send(msg);
+		Message msg1 = new Message("alice", "Lookup1", "This is the first message of 18842");
+		mp.send(msg1);
+		Message msg2 = new Message("alice", "Lookup2", "This is the second message of 18842");
+		mp.send(msg2);
+		
+		while (true) {
+			System.out.println("Message rcvd :" + mp.receive().getData());
+		}
 	}
 }

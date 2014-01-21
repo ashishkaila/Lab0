@@ -58,7 +58,7 @@ public class MessagePasser {
 	}
 	
 	@SuppressWarnings("unchecked")
-	private int generateSendRules() {
+	public int generateSendRules() {
 		FileInputStream configFileStream = null;
 		ArrayList<Rule> sendRules = null;
 		
@@ -114,7 +114,7 @@ public class MessagePasser {
 	}
 	
 	@SuppressWarnings("unchecked")
-	private int generateRcvRules() {
+	public int generateRcvRules() {
 		FileInputStream configFileStream = null;
 		ArrayList<Rule> rcvRules = null;
 		
@@ -246,6 +246,7 @@ public class MessagePasser {
 		return 0;
 	}
 
+	/* This method should be called with locks held */
 	public Rule getSendRule(Message msg) {
 		Rule matchedRule = null;
 		for (Rule rule : sendRules) {
@@ -258,6 +259,7 @@ public class MessagePasser {
 		return matchedRule;
 	}
 	
+	/* This method should be called with locks held */
 	public Rule getRcvRule(Message msg) {
 		Rule matchedRule = null;
 		for (Rule rule : rcvRules) {
@@ -269,9 +271,22 @@ public class MessagePasser {
 			
 		return matchedRule;
 	}	
+	
+	/* This method should always be synchronized */
+	public synchronized void updateConfig() {
+		long modifiedTime = 0;
+		
+		/* reload rules if configuration file has been modified */
+		modifiedTime = this.config.lastModified();
+		
+		if (this.configLastModifiedTime < modifiedTime) {
+			generateSendRules();
+			generateRcvRules();
+			this.configLastModifiedTime = modifiedTime;
+			}	
+	}
 
 	public void send(Message message) {
-		long modifiedTime = 0;
 		Rule msgRule = null;
 		Message dupMsg = null;
 		boolean sendDelay = false;
@@ -289,15 +304,8 @@ public class MessagePasser {
 		message.setId(id.incrementAndGet());
 		message.setSrc(this.name);
 		
-		/* reload rules if configuration file has been modified */
-		modifiedTime = this.config.lastModified();
-		
 		synchronized(this) {
-			if (this.configLastModifiedTime < modifiedTime) {
-				generateSendRules();
-				generateRcvRules();
-				this.configLastModifiedTime = modifiedTime;
-				}
+			this.updateConfig();
 			msgRule = getSendRule(message);
 		}
 		
@@ -310,7 +318,9 @@ public class MessagePasser {
 					return;
 				} else if (msgRule.getAction().equals("delay")) {
 					/* add message to delay queue, it will be acted on later */
+					synchronized(this) {
 						this.sendDelayQueue.add(message);
+					}
 					return;
 				} else if (msgRule.getAction().equals("duplicate")) {
 					/* create a duplicate of the message */
@@ -385,6 +395,10 @@ public class MessagePasser {
 				if (tmpStream != null) {
 					tmpStream.close();
 				}
+				
+				if (sock != null) {
+					sock.close();
+				}
 			} catch (Exception ex){
 				ex.printStackTrace();
 			}
@@ -400,6 +414,10 @@ public class MessagePasser {
 				/* TODO -- does closing the stream ensure underlying socket is also closed */
 				if (tmpStream != null) {
 					tmpStream.close();
+				}
+				
+				if (sock != null) {
+					sock.close();
 				}
 			} catch (Exception ex){
 				ex.printStackTrace();
@@ -417,6 +435,10 @@ public class MessagePasser {
 				if (tmpStream != null) {
 					tmpStream.close();
 				}
+				
+				if (sock != null) {
+					sock.close();
+				}
 			} catch (Exception ex){
 				ex.printStackTrace();
 				System.err.println("An unknown exception occurred while sending to destination "
@@ -430,11 +452,41 @@ public class MessagePasser {
 					if (tmpStream != null) {
 						tmpStream.close();
 					}
+					
+					if (sock != null) {
+						sock.close();
+					}
 				} catch (Exception exc){
 					exc.printStackTrace();
 				}
 			}
 		} 
+	}
+	
+	public Message receive() {
+		Message message = null;
+		try {
+			message = this.rcvQueue.take();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+		return message;
+	}
+	
+	public File getConfig() {
+		return config;
+	}
+
+	public void setConfig(File config) {
+		this.config = config;
+	}
+
+	public long getConfigLastModifiedTime() {
+		return configLastModifiedTime;
+	}
+
+	public void setConfigLastModifiedTime(long configLastModifiedTime) {
+		this.configLastModifiedTime = configLastModifiedTime;
 	}
 
 	public BlockingQueue<Message> getRcvQueue() {

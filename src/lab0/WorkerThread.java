@@ -26,6 +26,7 @@ public class WorkerThread implements Runnable {
 			objIpStream = new ObjectInputStream(socket.getInputStream());
 			while(true) {
 				msg = (Message)objIpStream.readObject();
+				System.err.println(msg.getData());
 				assert msg instanceof Message;
 				src = new String(msg.getSrc());
 				mp.getRcvQueue().add(msg);

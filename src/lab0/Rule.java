@@ -7,6 +7,32 @@ public class Rule {
 	private String kind = null;
 	private Integer seqnum = null;
 
+	public boolean matches(Message msg) {
+		
+		/* if only action is in the rule it will match all messages */
+		if (src == null && dest == null && kind == null && seqnum == null) {
+			return true;
+		}
+		
+		if (src != null && !src.equals(msg.getSrc())) {
+			return false;
+		}
+		
+		if (dest != null && !dest.equals(msg.getDest())) {
+			return false;
+		}
+		
+		if (kind != null && !kind.equals(msg.getKind())) {
+			return false;
+		}
+		
+		if (seqnum != null && !seqnum.equals(msg.getId())) {
+			return false;
+		}
+		
+		return true;
+	}
+	
 	public Rule(String action) {
 		this.action = action;
 	}

@@ -7,11 +7,13 @@ import java.io.IOException;
 import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -24,7 +26,10 @@ public class MessagePasser {
 	private long configLastModifiedTime;
 	private String name;
 	private AtomicInteger id;
+	private BlockingQueue<Message> sendDelayQueue;
 	private BlockingQueue<Message> rcvQueue;
+	private BlockingQueue<Message> rcvDelayQueue;
+	private HashMap<String, ObjectOutputStream> connectionCache;
 	
 	public HashMap<String, Node> nodeMap = null;
 	public ArrayList<Rule> sendRules = null;
@@ -39,8 +44,13 @@ public class MessagePasser {
 		nodeMap = new HashMap<String, Node>();
 		
 		parseConfig();
+		
+		/* initialize state for message passer */
 		id = new AtomicInteger(-1);
+		setSendDelayQueue(new LinkedBlockingQueue<Message>());
 		setRcvQueue(new LinkedBlockingQueue<Message>());
+		setRcvDelayQueue(new LinkedBlockingQueue<Message>());
+		setConnectionCache(new HashMap<String, ObjectOutputStream>());
 		
 		/* create server thread for this message passer object */
 		ServerThread server = new ServerThread(this);
@@ -235,7 +245,198 @@ public class MessagePasser {
 		
 		return 0;
 	}
+
+	public Rule getSendRule(Message msg) {
+		Rule matchedRule = null;
+		for (Rule rule : sendRules) {
+			if (rule.matches(msg)) {
+				matchedRule = rule;
+				break;
+			}
+		}
+			
+		return matchedRule;
+	}
 	
+	public Rule getRcvRule(Message msg) {
+		Rule matchedRule = null;
+		for (Rule rule : rcvRules) {
+			if (rule.matches(msg)) {
+				matchedRule = rule;
+				break;
+			}
+		}
+			
+		return matchedRule;
+	}	
+
+	public void send(Message message) {
+		long modifiedTime = 0;
+		Rule msgRule = null;
+		Message dupMsg = null;
+		boolean sendDelay = false;
+		
+		if (message == null || message.getDest() == null) {
+			return;
+		}
+		
+		/* TODO - Are we allowed to send to self */
+		if (nodeMap.get(message.getDest()) == null) {
+			System.err.println("Tried sending message to unknown host " + message.getDest());
+			return;
+		}
+		
+		message.setId(id.incrementAndGet());
+		message.setSrc(this.name);
+		
+		/* reload rules if configuration file has been modified */
+		modifiedTime = this.config.lastModified();
+		
+		synchronized(this) {
+			if (this.configLastModifiedTime < modifiedTime) {
+				generateSendRules();
+				generateRcvRules();
+				this.configLastModifiedTime = modifiedTime;
+				}
+			msgRule = getSendRule(message);
+		}
+		
+		/* Check to see what the rules say needs to be done with this message */
+		try {
+			if (msgRule != null) {
+				if (msgRule.getAction().equals("drop")) {
+					/* forget the message */
+					message = null;
+					return;
+				} else if (msgRule.getAction().equals("delay")) {
+					/* add message to delay queue, it will be acted on later */
+						this.sendDelayQueue.add(message);
+					return;
+				} else if (msgRule.getAction().equals("duplicate")) {
+					/* create a duplicate of the message */
+					dupMsg = message.duplicate();
+					dupMsg.setDuplicate(true);
+				}
+			}
+			
+			/* now send the message(s) */
+			actuallySend(message);
+			sendDelay = true;
+		} catch (UnsupportedOperationException e) {
+			e.printStackTrace();
+		} catch (Exception e) {
+			e.printStackTrace();
+		} finally {
+			/* it's possible that the sendQueue became empty but we still didn't
+			 * send the duplicate message, in that case we need to check that 
+			 */
+			if (dupMsg != null) {
+				actuallySend(dupMsg);
+			}
+			
+			if (sendDelay) {
+				try {
+					synchronized(this) {
+						while (!this.sendDelayQueue.isEmpty()) {
+							actuallySend(sendDelayQueue.remove());
+						}
+					}
+				} catch (NoSuchElementException e){
+					e.printStackTrace();
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+
+	private void actuallySend(Message message) {
+		ObjectOutputStream objOpStream = null;
+		Socket sock = null;
+		
+		if (message == null) {
+			return;
+		}
+
+		try {
+			/* lookup the cached connection */
+			synchronized(this) {
+				objOpStream = this.getConnectionCache().get(message.getDest());
+				if (objOpStream == null) {
+					sock = new Socket(nodeMap.get(message.getDest()).getIp(), 
+							nodeMap.get(message.getDest()).getPort());
+					objOpStream = new ObjectOutputStream(sock.getOutputStream());
+					this.getConnectionCache().put(message.getDest(), objOpStream);
+				}
+
+				objOpStream.writeObject(message);
+				objOpStream.flush();
+				objOpStream.reset();
+			}
+		} catch (UnknownHostException e) {
+			e.printStackTrace();
+			System.err.println("Unable to connect to host " + message.getDest());
+			try {
+				ObjectOutputStream tmpStream = null;
+				synchronized(this) {
+					 tmpStream = this.getConnectionCache().remove(message.getDest());
+				}
+				/* TODO -- does closing the stream ensure underlying socket is also closed */
+				if (tmpStream != null) {
+					tmpStream.close();
+				}
+			} catch (Exception ex){
+				ex.printStackTrace();
+			}
+		} catch (SocketException e) {
+			e.printStackTrace();
+			System.err.println("Unable to create or access Socket to destination "
+			+ message.getDest());
+			try {
+				ObjectOutputStream tmpStream = null;
+				synchronized(this) {
+					 tmpStream = this.getConnectionCache().remove(message.getDest());
+				}
+				/* TODO -- does closing the stream ensure underlying socket is also closed */
+				if (tmpStream != null) {
+					tmpStream.close();
+				}
+			} catch (Exception ex){
+				ex.printStackTrace();
+			}
+		} catch (IOException e) {
+			e.printStackTrace();
+			System.err.println("An I/O exception occurred while sending to destination "
+			+ message.getDest());
+			try {
+				ObjectOutputStream tmpStream = null;
+				synchronized(this) {
+					 tmpStream = this.getConnectionCache().remove(message.getDest());
+				}
+				/* TODO -- does closing the stream ensure underlying socket is also closed */
+				if (tmpStream != null) {
+					tmpStream.close();
+				}
+			} catch (Exception ex){
+				ex.printStackTrace();
+				System.err.println("An unknown exception occurred while sending to destination "
+						+ message.getDest());
+				try {
+					ObjectOutputStream tmpStream = null;
+					synchronized(this) {
+						 tmpStream = this.getConnectionCache().remove(message.getDest());
+					}
+					/* TODO -- does closing the stream ensure underlying socket is also closed */
+					if (tmpStream != null) {
+						tmpStream.close();
+					}
+				} catch (Exception exc){
+					exc.printStackTrace();
+				}
+			}
+		} 
+	}
+
 	public BlockingQueue<Message> getRcvQueue() {
 		return rcvQueue;
 	}
@@ -244,40 +445,28 @@ public class MessagePasser {
 		this.rcvQueue = rcvQueue;
 	}
 	
-	public void send(Message message) {
-		ObjectOutputStream objOpStream = null;
-		Socket clientSocket = null;
-		if (message.getDest() == null) {
-			return;
-		}
-		
-		message.setId(id.incrementAndGet());
-		message.setSrc(this.name);
-		/* TODO: Rule checking  -- only 1 person should be writing to a given stream */
-		try {
-			clientSocket = new Socket(nodeMap.get(message.getDest()).getIp(), 
-					nodeMap.get(message.getDest()).getPort());
-			objOpStream = new ObjectOutputStream(clientSocket.getOutputStream());
-			objOpStream.writeObject(message);
-			objOpStream.flush();
-			objOpStream.reset();
-		} catch (UnknownHostException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		} finally {
-			try {
-				if (objOpStream != null) {
-					objOpStream.close();
-				}
-				
-				if (clientSocket != null) {
-					clientSocket.close();
-				}
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-		}
+	public BlockingQueue<Message> getSendDelayQueue() {
+		return sendDelayQueue;
+	}
+
+	public void setSendDelayQueue(BlockingQueue<Message> sendDelayQueue) {
+		this.sendDelayQueue = sendDelayQueue;
+	}
+
+	public BlockingQueue<Message> getRcvDelayQueue() {
+		return rcvDelayQueue;
+	}
+
+	public void setRcvDelayQueue(BlockingQueue<Message> rcvDelayQueue) {
+		this.rcvDelayQueue = rcvDelayQueue;
+	}
+
+	public HashMap<String, ObjectOutputStream> getConnectionCache() {
+		return connectionCache;
+	}
+
+	public void setConnectionCache(HashMap<String, ObjectOutputStream> connectionCache) {
+		this.connectionCache = connectionCache;
 	}
 
 	private class ServerThread implements Runnable {

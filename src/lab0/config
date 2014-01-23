@@ -1,13 +1,13 @@
 #this is a comment
 configuration :
  - name : alice
-   ip : 127.0.0.1
-   port : 12344 
+   ip : 128.237.219.220
+   port : 12344
  - name : bob
-   ip : 127.0.0.1
+   ip : 128.237.234.59
    port : 14255
  - name : charlie
-   ip : 128.2.130.19
+   ip : 128.237.121.93
    port : 12998
  - name : daphnie
    ip : 192.168.1.87
@@ -30,3 +30,5 @@ sendRules :
 receiveRules :
  - action : duplicate
    src : charlie
+ - action : duplicate
+   src : alice

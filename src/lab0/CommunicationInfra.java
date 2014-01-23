@@ -15,7 +15,7 @@ public class CommunicationInfra {
 			System.out.println("Usage: java CommunicationInfra <config file> <process uid> \n");
 			break;
 		case Constants.INVALID_CONFIG_FILE:
-			System.out.println("Configuration file is incorrectly specified. \n");
+			System.out.println("Configuration file is invalid or incorrectly specified. \n");
 			break;
 		case Constants.INVALID_CONFIG_PARAMS:
 			System.out.println("Configuration file has invalid parameters please revisit it. \n");
@@ -62,7 +62,7 @@ public class CommunicationInfra {
 				}
 			}
 
-			mp.send(new Message(tokens[1], tokens[2], msg));
+			mp.send(new Message(tokens[1], tokens[2], msg.toString()));
 			return;
 		} else if (tokens[0].equalsIgnoreCase("R") && tokens.length == 1) {
 			System.out.println("Received: " + mp.receive().getData());

@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.yaml.snakeyaml.Yaml;
 
 public class MessagePasser {
-	
+
 	private File config;
 	private long configLastModifiedTime;
 	private String name;
@@ -30,11 +30,11 @@ public class MessagePasser {
 	private BlockingQueue<Message> rcvQueue;
 	private BlockingQueue<Message> rcvDelayQueue;
 	private HashMap<String, ObjectOutputStream> connectionCache;
-	
+
 	public HashMap<String, Node> nodeMap = null;
 	public ArrayList<Rule> sendRules = null;
 	public ArrayList<Rule> rcvRules = null;
-	
+
 	public MessagePasser(String configFile, String name) {
 		config = new File(configFile);
 		if (!config.exists() || config.isDirectory()) {
@@ -42,45 +42,48 @@ public class MessagePasser {
 		}
 		this.name = new String(name);
 		nodeMap = new HashMap<String, Node>();
-		
+
 		parseConfig();
-		
+
 		/* initialize state for message passer */
 		id = new AtomicInteger(-1);
 		setSendDelayQueue(new LinkedBlockingQueue<Message>());
 		setRcvQueue(new LinkedBlockingQueue<Message>());
 		setRcvDelayQueue(new LinkedBlockingQueue<Message>());
 		setConnectionCache(new HashMap<String, ObjectOutputStream>());
-		
+
 		/* create server thread for this message passer object */
 		ServerThread server = new ServerThread(this);
 		new Thread(server).start();
 	}
-	
+
 	@SuppressWarnings("unchecked")
 	public int generateSendRules() {
 		FileInputStream configFileStream = null;
 		ArrayList<Rule> sendRules = null;
-		
+
 		try {
 			configFileStream = new FileInputStream(config);
 			Yaml yaml = new Yaml();
 			sendRules = new ArrayList<Rule>();
-			
+
 			Map<String, Object> configMap = (Map<String, Object>) yaml.load(configFileStream);
 			if (configMap.isEmpty() || configMap.keySet().size() > Constants.CONFIG_PARAMS) {
 				return -1;
 			}
-			
+
 			/* read the send rules from configuration file
 			 *    - can have an empty send rules section or unspecified altogether
 			 */
 			List<Map<String, Object>> sendRuleList = (List<Map<String, Object>>)
 					configMap.get("sendRules");
+			if (sendRuleList == null) {
+				return 0;
+			}
 			for (Map<String, Object> iterator : sendRuleList) {
 				String action = (String)iterator.get("action");
-				if (action == null || !(action.equalsIgnoreCase("drop") 
-						|| action.equalsIgnoreCase("duplicate") 
+				if (action == null || !(action.equalsIgnoreCase("drop")
+						|| action.equalsIgnoreCase("duplicate")
 						|| action.equalsIgnoreCase("delay"))) {
 					return -1;
 				}
@@ -92,51 +95,54 @@ public class MessagePasser {
 				sendRules.add(newRule);
 			}
 		} catch (FileNotFoundException e) {
-			e.printStackTrace();
+			System.err.println("Config file not found " + config);
 			return -1;
 		} catch (Exception e) {
-			e.printStackTrace();
+			System.err.println("Unable to generate send rules from config: " + config);
 			return -1;
 		} finally {
 			if (configFileStream != null) {
 				try {
 					configFileStream.close();
 				} catch (IOException e) {
-					e.printStackTrace();
+					System.err.println("SendRules: Unable to close config stream");
 					return -1;
 				}
 			}
 		}
-		
+
 		/* if parsing the configuration worked update send rules */
 		this.sendRules = sendRules;
 		return 0;
 	}
-	
+
 	@SuppressWarnings("unchecked")
 	public int generateRcvRules() {
 		FileInputStream configFileStream = null;
 		ArrayList<Rule> rcvRules = null;
-		
+
 		try {
 			configFileStream = new FileInputStream(config);
 			Yaml yaml = new Yaml();
 			rcvRules = new ArrayList<Rule>();
-			
+
 			Map<String, Object> configMap = (Map<String, Object>) yaml.load(configFileStream);
 			if (configMap.isEmpty() || configMap.keySet().size() > Constants.CONFIG_PARAMS) {
 				return -1;
 			}
-			
+
 			/* read the receive rules from configuration file
 			 *    - can have an empty receive rules section or unspecified altogether
 			 */
 			List<Map<String, Object>> rcvRuleList = (List<Map<String, Object>>)
 					configMap.get("receiveRules");
+			if (rcvRuleList == null) {
+				return 0;
+			}
 			for (Map<String, Object> iterator : rcvRuleList) {
 				String action = (String)iterator.get("action");
-				if (action == null || !(action.equalsIgnoreCase("drop") 
-						|| action.equalsIgnoreCase("duplicate") 
+				if (action == null || !(action.equalsIgnoreCase("drop")
+						|| action.equalsIgnoreCase("duplicate")
 						|| action.equalsIgnoreCase("delay"))) {
 					return -1;
 				}
@@ -148,32 +154,32 @@ public class MessagePasser {
 				rcvRules.add(newRule);
 			}
 		} catch (FileNotFoundException e) {
-			e.printStackTrace();
+			System.err.println("Config file not found " + config);
 			return -1;
 		} catch (Exception e) {
-			e.printStackTrace();
+			System.err.println("Unable to generate receive rules from config: " + config);
 			return -1;
 		} finally {
 			if (configFileStream != null) {
 				try {
 					configFileStream.close();
 				} catch (IOException e) {
-					e.printStackTrace();
+					System.err.println("RcvRules: Unable to close config stream");
 					return -1;
 				}
 			}
 		}
-		
+
 		/* if parsing the configuration worked update receive rules */
 		this.rcvRules = rcvRules;
 		return 0;
 	}
-	
+
 	@SuppressWarnings("unchecked")
 	public int parseConfig() {
 		FileInputStream configFileStream = null;
 		configLastModifiedTime = config.lastModified();
-		
+
 		try {
 			configFileStream = new FileInputStream(config);
 			Yaml yaml = new Yaml();
@@ -182,7 +188,7 @@ public class MessagePasser {
 				CommunicationInfra.usage(Constants.INVALID_CONFIG_PARAMS);
 				return -1;
 			}
-			
+
 			/* parse configuration parameter from configuration file */
 			List<Map<String, Object>> configList = (List<Map<String, Object>>)
 					configMap.get("configuration");
@@ -194,12 +200,12 @@ public class MessagePasser {
 				String name = (String) iterator.get("name");
 				String ip = (String) iterator.get("ip");
 				Integer port = (Integer)iterator.get("port");
-				
+
 				if (name == null || ip == null || port == null) {
 					CommunicationInfra.usage(Constants.INVALID_CONFIG_PARAMS);
 					return -1;
 				}
-				
+
 				Node newNode = new Node(name, ip, port);
 				if (nodeMap.containsKey(name)) {
 					CommunicationInfra.usage(Constants.INVALID_CONFIG_PARAMS);
@@ -207,28 +213,26 @@ public class MessagePasser {
 				}
 				nodeMap.put(name, newNode);
 			}
-			
+
 			if (!nodeMap.containsKey(this.name)) {
 				CommunicationInfra.usage(Constants.INVALID_CONFIG_PARAMS);
 				return -1;
 			}
-			
+
 			if (generateSendRules() < 0) {
 				CommunicationInfra.usage(Constants.INVALID_CONFIG_PARAMS);
 				return -1;
 			}
-			
+
 			if (generateRcvRules() < 0) {
 				CommunicationInfra.usage(Constants.INVALID_CONFIG_PARAMS);
 				return -1;
 			}
-			
+
 		}  catch (FileNotFoundException e) {
-			e.printStackTrace();
 			CommunicationInfra.usage(Constants.INVALID_CONFIG_FILE);
 			return -1;
 		} catch (Exception e) {
-			e.printStackTrace();
 			CommunicationInfra.usage(Constants.INVALID_CONFIG_FILE);
 			return -1;
 		} finally {
@@ -236,13 +240,13 @@ public class MessagePasser {
 				try {
 					configFileStream.close();
 				} catch (IOException e) {
-					e.printStackTrace();
+					System.err.println("parseConfig: Unable to close config stream");
 					CommunicationInfra.usage(Constants.INVALID_CONFIG_FILE);
 					return -1;
 				}
 			}
 		}
-		
+
 		return 0;
 	}
 
@@ -255,10 +259,10 @@ public class MessagePasser {
 				break;
 			}
 		}
-			
+
 		return matchedRule;
 	}
-	
+
 	/* This method should be called with locks held */
 	public Rule getRcvRule(Message msg) {
 		Rule matchedRule = null;
@@ -268,47 +272,44 @@ public class MessagePasser {
 				break;
 			}
 		}
-			
+
 		return matchedRule;
-	}	
-	
+	}
+
 	/* This method should always be synchronized */
 	public synchronized void updateConfig() {
 		long modifiedTime = 0;
-		
+
 		/* reload rules if configuration file has been modified */
 		modifiedTime = this.config.lastModified();
-		
+
 		if (this.configLastModifiedTime < modifiedTime) {
 			generateSendRules();
 			generateRcvRules();
 			this.configLastModifiedTime = modifiedTime;
-			}	
+			}
 	}
 
 	public void send(Message message) {
 		Rule msgRule = null;
-		Message dupMsg = null;
-		boolean sendDelay = false;
-		
+
 		if (message == null || message.getDest() == null) {
 			return;
 		}
-		
-		/* TODO - Are we allowed to send to self */
+
 		if (nodeMap.get(message.getDest()) == null) {
 			System.err.println("Tried sending message to unknown host " + message.getDest());
 			return;
 		}
-		
+
 		message.setId(id.incrementAndGet());
 		message.setSrc(this.name);
-		
+
 		synchronized(this) {
 			this.updateConfig();
 			msgRule = getSendRule(message);
 		}
-		
+
 		/* Check to see what the rules say needs to be done with this message */
 		try {
 			if (msgRule != null) {
@@ -323,47 +324,32 @@ public class MessagePasser {
 					}
 					return;
 				} else if (msgRule.getAction().equals("duplicate")) {
-					/* create a duplicate of the message */
-					dupMsg = message.duplicate();
-					dupMsg.setDuplicate(true);
+					/* send a duplicate of the message */
+					actuallySend(message);
+					message.setDuplicate(true);
 				}
 			}
-			
+
 			/* now send the message(s) */
 			actuallySend(message);
-			sendDelay = true;
-		} catch (UnsupportedOperationException e) {
-			e.printStackTrace();
-		} catch (Exception e) {
-			e.printStackTrace();
-		} finally {
-			/* it's possible that the sendQueue became empty but we still didn't
-			 * send the duplicate message, in that case we need to check that 
-			 */
-			if (dupMsg != null) {
-				actuallySend(dupMsg);
-			}
-			
-			if (sendDelay) {
-				try {
-					synchronized(this) {
-						while (!this.sendDelayQueue.isEmpty()) {
-							actuallySend(sendDelayQueue.remove());
-						}
-					}
-				} catch (NoSuchElementException e){
-					e.printStackTrace();
-				} catch (Exception e) {
-					e.printStackTrace();
+
+			synchronized(this) {
+				while (!this.sendDelayQueue.isEmpty()) {
+					actuallySend(sendDelayQueue.remove());
 				}
 			}
+
+		}  catch (NoSuchElementException e){
+			System.err.println("send: Delay queue empty");
+		} catch (Exception e) {
+			System.err.println("send: Exception while sending message");
 		}
 	}
 
 	private void actuallySend(Message message) {
 		ObjectOutputStream objOpStream = null;
 		Socket sock = null;
-		
+
 		if (message == null) {
 			return;
 		}
@@ -373,7 +359,7 @@ public class MessagePasser {
 			synchronized(this) {
 				objOpStream = this.getConnectionCache().get(message.getDest());
 				if (objOpStream == null) {
-					sock = new Socket(nodeMap.get(message.getDest()).getIp(), 
+					sock = new Socket(nodeMap.get(message.getDest()).getIp(),
 							nodeMap.get(message.getDest()).getPort());
 					objOpStream = new ObjectOutputStream(sock.getOutputStream());
 					this.getConnectionCache().put(message.getDest(), objOpStream);
@@ -384,26 +370,24 @@ public class MessagePasser {
 				objOpStream.reset();
 			}
 		} catch (UnknownHostException e) {
-			e.printStackTrace();
 			System.err.println("Unable to connect to host " + message.getDest());
 			try {
 				ObjectOutputStream tmpStream = null;
 				synchronized(this) {
 					 tmpStream = this.getConnectionCache().remove(message.getDest());
 				}
-				/* TODO -- does closing the stream ensure underlying socket is also closed */
+
 				if (tmpStream != null) {
 					tmpStream.close();
 				}
-				
+
 				if (sock != null) {
 					sock.close();
 				}
 			} catch (Exception ex){
-				ex.printStackTrace();
+				System.err.println("actuallySend: Error while closing output stream");
 			}
 		} catch (SocketException e) {
-			e.printStackTrace();
 			System.err.println("Unable to create or access Socket to destination "
 			+ message.getDest());
 			try {
@@ -411,19 +395,18 @@ public class MessagePasser {
 				synchronized(this) {
 					 tmpStream = this.getConnectionCache().remove(message.getDest());
 				}
-				/* TODO -- does closing the stream ensure underlying socket is also closed */
+
 				if (tmpStream != null) {
 					tmpStream.close();
 				}
-				
+
 				if (sock != null) {
 					sock.close();
 				}
 			} catch (Exception ex){
-				ex.printStackTrace();
+				System.err.println("actuallySend: Error while closing output stream");
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
 			System.err.println("An I/O exception occurred while sending to destination "
 			+ message.getDest());
 			try {
@@ -431,48 +414,36 @@ public class MessagePasser {
 				synchronized(this) {
 					 tmpStream = this.getConnectionCache().remove(message.getDest());
 				}
-				/* TODO -- does closing the stream ensure underlying socket is also closed */
+
 				if (tmpStream != null) {
 					tmpStream.close();
 				}
-				
+
 				if (sock != null) {
 					sock.close();
 				}
 			} catch (Exception ex){
-				ex.printStackTrace();
-				System.err.println("An unknown exception occurred while sending to destination "
-						+ message.getDest());
-				try {
-					ObjectOutputStream tmpStream = null;
-					synchronized(this) {
-						 tmpStream = this.getConnectionCache().remove(message.getDest());
-					}
-					/* TODO -- does closing the stream ensure underlying socket is also closed */
-					if (tmpStream != null) {
-						tmpStream.close();
-					}
-					
-					if (sock != null) {
-						sock.close();
-					}
-				} catch (Exception exc){
-					exc.printStackTrace();
-				}
+				System.err.println("actuallySend: Error while closing output stream");
 			}
-		} 
+		}
 	}
-	
+
 	public Message receive() {
 		Message message = null;
+
+		/* update the rules if configuration file was changed */
+		synchronized(this) {
+			this.updateConfig();
+		}
+
 		try {
 			message = this.rcvQueue.take();
 		} catch (InterruptedException e) {
-			e.printStackTrace();
+			System.err.println("recevie: Block on receive was interrupted");
 		}
 		return message;
 	}
-	
+
 	public File getConfig() {
 		return config;
 	}
@@ -496,7 +467,7 @@ public class MessagePasser {
 	public void setRcvQueue(BlockingQueue<Message> rcvQueue) {
 		this.rcvQueue = rcvQueue;
 	}
-	
+
 	public BlockingQueue<Message> getSendDelayQueue() {
 		return sendDelayQueue;
 	}
@@ -523,7 +494,7 @@ public class MessagePasser {
 
 	private class ServerThread implements Runnable {
 		private MessagePasser mp;
-		
+
 		public ServerThread(MessagePasser mp) {
 			this.mp = mp;
 		}
@@ -535,18 +506,25 @@ public class MessagePasser {
 				serverSock = new ServerSocket(mp.nodeMap.get(mp.name).getPort());
 				while (true) {
 					/* receiver is blocked -- blocking server implementation */
-					Socket newConnection = serverSock.accept();
-					new WorkerThread(mp, newConnection);
+					Socket newConnection = null;
+					try {
+						newConnection = serverSock.accept();
+						new WorkerThread(mp, newConnection);
+					} catch (IOException e) {
+						System.err.println("serverThread: Unable to accept new connection");
+					}
 				}
 			} catch (IOException e) {
-				e.printStackTrace();
+				System.err.println("serverThread: Unable to create server socket");
+				System.exit(-1);
 			} finally {
 				try {
 					if ( serverSock != null) {
 						serverSock.close();
 					}
 				} catch (IOException e) {
-					e.printStackTrace();
+					System.err.println("serverThread: Unable to close server socket");
+					System.exit(-1);
 				}
 			}
 		}

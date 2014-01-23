@@ -14,21 +14,19 @@ configuration :
    port : 1987
 
 sendRules :
- - action : drop
-   src : bob
-   dest : alice
-   kind : Ack
-   seqNum : 4
  - action : delay
    src : alice
-   dest : alice
-   kind : Lookup1
+   dest : bob
+   kind : delay
  - action : duplicate
    src : alice
-   dest : alice
-   kind : Lookup2
-
+   dest : bob
+   kind : duplicate
+ - action : drop
+   src : alice
+   dest : bob
+   kind : drop
+   
 receiveRules :
  - action : duplicate
    src : charlie
-   seqNum : 3

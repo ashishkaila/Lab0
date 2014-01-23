@@ -10,13 +10,13 @@ public class WorkerThread implements Runnable {
 
 	private MessagePasser mp;
 	private Socket socket;
-	
+
 	public WorkerThread(MessagePasser mp, Socket socket) {
 		this.mp = mp;
 		this.socket = socket;
 		new Thread(this).start();
 	}
-	
+
 	@Override
 	public void run() {
 		ObjectInputStream objIpStream = null;
@@ -24,20 +24,19 @@ public class WorkerThread implements Runnable {
 		Message dupMsg = null;
 		String src = null;
 		Rule msgRule = null;
-		
+
 		try {
 			objIpStream = new ObjectInputStream(socket.getInputStream());
 			while(true) {
 				msg = (Message)objIpStream.readObject();
 				assert msg instanceof Message;
 				src = new String(msg.getSrc());
-				
+
 				/* update the rules if configuration file was changed */
 				synchronized(this.mp) {
-					this.mp.updateConfig();
 					msgRule = this.mp.getRcvRule(msg);
 				}
-				
+
 				if (msgRule != null) {
 					if (msgRule.getAction().equals("drop")) {
 						continue;
@@ -50,19 +49,17 @@ public class WorkerThread implements Runnable {
 					} else if (msgRule.getAction().equals("duplicate")) {
 						try {
 							dupMsg = msg.duplicate();
-							/* TODO -- should duplicate flag be set  */
 							dupMsg.setDuplicate(true);
+							if (dupMsg != null) {
+								this.mp.getRcvQueue().add(dupMsg);
+							}
 						} catch (UnsupportedOperationException e) {
-							e.printStackTrace();
 							System.err.println("Receiver failed to make a copy of message. \n");
 						}
 					}
 				}
-				
+
 				this.mp.getRcvQueue().add(msg);
-				if (dupMsg != null) {
-					this.mp.getRcvQueue().add(dupMsg);
-				}
 
 				try {
 					synchronized(this.mp) {
@@ -71,25 +68,23 @@ public class WorkerThread implements Runnable {
 						}
 					}
 				} catch (NoSuchElementException e) {
-					e.printStackTrace();
+					System.err.println("workerThread: No more messages in delay queue");
 				} catch (Exception e) {
-					e.printStackTrace();
+					System.err.println("workerThread: Generic exception");
 				}
 			}
 		} catch (ClassNotFoundException e) {
-			e.printStackTrace();
+			System.err.println("workerThread: Unexpected class object sent over the wire");
 		} catch (EOFException e) {
-			System.err.println("connection terminated from " + src +
-					" Posible Reason: " + e.getMessage());
-		}
-		 catch (IOException e) {
-			e.printStackTrace();
+			System.err.println("connection terminated from " + src);
+		} catch (IOException e) {
+			System.err.println("workerThread: Unexpected I/O error encountered");
 		} finally {
 			if (objIpStream != null) {
 				try {
 					objIpStream.close();
 				} catch (IOException e) {
-					e.printStackTrace();
+					System.err.println("workerThread: Exception while trying to close stream");
 				}
 			}
 		}

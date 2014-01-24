@@ -21,7 +21,6 @@ public class WorkerThread implements Runnable {
 	public void run() {
 		ObjectInputStream objIpStream = null;
 		Message msg = null;
-		Message dupMsg = null;
 		String src = null;
 		Rule msgRule = null;
 
@@ -48,7 +47,7 @@ public class WorkerThread implements Runnable {
 						continue;
 					} else if (msgRule.getAction().equals("duplicate")) {
 						try {
-							dupMsg = msg.duplicate();
+							Message dupMsg = msg.duplicate();
 							dupMsg.setDuplicate(true);
 							if (dupMsg != null) {
 								this.mp.getRcvQueue().add(dupMsg);

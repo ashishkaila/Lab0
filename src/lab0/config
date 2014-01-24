@@ -1,10 +1,10 @@
 #this is a comment
 configuration :
  - name : alice
-   ip : 128.237.219.220
+   ip : 127.0.0.1
    port : 12344
  - name : bob
-   ip : 128.237.234.59
+   ip : 127.0.0.1
    port : 14255
  - name : charlie
    ip : 128.237.121.93

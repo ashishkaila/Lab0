@@ -1,3 +1,11 @@
+/**
+ * File: CommunicationInfra.java
+ * @author Ashish Kaila
+ * @author Ying Li
+ * @since  January 18th 2014
+ *
+ * Brief: Class used to represent Serializable object
+ */
 package lab0;
 
 import java.io.ByteArrayInputStream;
@@ -10,7 +18,7 @@ import java.io.Serializable;
 public class Message implements Serializable {
 
 	/**
-	 * 
+	 *
 	 */
 	private static final long serialVersionUID = -4898787461414442556L;
 	private String src = null;
@@ -19,20 +27,20 @@ public class Message implements Serializable {
 	private Object data;
 	private boolean isDuplicate = false;
 	private int id = -1;
-	
+
 	public Message(String dest, String kind, Object data) {
 		this.setDest(dest);
 		this.setKind(kind);
 		this.setData(data);
 	}
-	
+
 	public Message duplicate() throws UnsupportedOperationException {
 		Message msg = null;
 		ByteArrayOutputStream bos = null;
 		ObjectOutputStream oos = null;
 		ByteArrayInputStream bis = null;
 		ObjectInputStream ois = null;
-		
+
 		if (!(this.data instanceof java.io.Serializable)) {
 			throw new UnsupportedOperationException();
 		}
@@ -42,7 +50,7 @@ public class Message implements Serializable {
 			oos.writeObject(this);
 			oos.flush();
 			oos.close();
-			
+
 			bis = new ByteArrayInputStream(bos.toByteArray());
 			ois = new ObjectInputStream(bis);
 			msg = (Message)ois.readObject();
@@ -55,15 +63,15 @@ public class Message implements Serializable {
 				if (bos != null) {
 					bos.close();
 				}
-				
+
 				if (oos != null) {
 					oos.close();
 				}
-				
+
 				if (bis != null) {
 					bis.close();
 				}
-				
+
 				if (ois != null) {
 					ois.close();
 				}
@@ -71,7 +79,7 @@ public class Message implements Serializable {
 				e.printStackTrace();
 			}
 		}
-		
+
 		return msg;
 	}
 

@@ -1,3 +1,11 @@
+/**
+ * File: CommunicationInfra.java
+ * @author Ashish Kaila
+ * @author Ying Li
+ * @since  January 18th 2014
+ *
+ * Brief: Basic Application wrapper
+ */
 package lab0;
 
 public class CommunicationInfra {

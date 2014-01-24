@@ -1,3 +1,12 @@
+/**
+ * File: MessagePasser.java
+ * @author Ashish Kaila
+ * @author Ying Li
+ * @since  January 18th 2014
+ *
+ * Brief: Message Passing interface. This is the class that is responsible
+ * for managing connections and sending/receiving messages from other nodes.
+ */
 package lab0;
 
 import java.io.File;

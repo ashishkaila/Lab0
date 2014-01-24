@@ -1,3 +1,12 @@
+/**
+ * File: CommunicationInfra.java
+ * @author Ashish Kaila
+ * @author Ying Li
+ * @since  January 18th 2014
+ *
+ * Brief: Basic Application thread functionality used to
+ * send and receive messages
+ */
 package lab0;
 
 import java.io.BufferedReader;

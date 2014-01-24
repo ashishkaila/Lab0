@@ -1,3 +1,11 @@
+/**
+ * File: CommunicationInfra.java
+ * @author Ashish Kaila
+ * @author Ying Li
+ * @since  January 18th 2014
+ *
+ * Brief: Thread functionality that accepts connections
+ */
 package lab0;
 
 import java.io.EOFException;
